@@ -3,31 +3,42 @@ import path from 'path';
 
 export default function handler(req, res) {
   try {
-    // 1. Read your uploaded Mockaroo file from the server repository
+    // 1. Read your newly modified data.json file
     const filePath = path.join(process.cwd(), 'api', 'data.json');
     const fileData = fs.readFileSync(filePath, 'utf8');
     const baseData = JSON.parse(fileData);
 
-    // 2. Fetch the current clock seconds right now (0 to 59)
+    // 2. Fetch the current clock seconds right now
     const currentSeconds = new Date().getSeconds();
 
-    // 3. Loop through your Mockaroo items and overwrite their static numbers with a real-time countdown
-    const realTimeData = baseData.map((train, index) => {
-      // This formula ensures a steady descending countdown loop (e.g., 5, 4, 3, 2, 1) based on the clock
-      // The offset (index * 15) keeps different trains from showing the exact same arrival minute
-      const dynamicCountdown = Math.max(1, Math.floor((120 - ((currentSeconds + (index * 15)) % 60)) / 10));
+    // 3. Loop through the outer array elements
+    const realTimeData = baseData.map((station) => {
+      // Check if this item has the nested 'details' array
+      if (station.details && Array.isArray(station.details)) {
+        // Map over the inner array to dynamically overwrite the minutes inside it
+        const updatedDetails = station.details.map((train, index) => {
+          const dynamicCountdown = Math.max(1, Math.floor((120 - ((currentSeconds + (index * 15)) % 60)) / 10));
+          return {
+            ...train,
+            next_arrival_minutes: dynamicCountdown // Overwrites the inner static number
+          };
+        });
+
+        // Return the object with the cleanly updated inner array
+        return {
+          ...station,
+          details: updatedDetails
+        };
+      }
       
-      return {
-        ...train,
-        next_arrival_minutes: dynamicCountdown
-      };
+      return station;
     });
 
-    // 4. Set network system headers so browsers read it as a raw, global API object
+    // 4. Set network system headers
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Content-Type', 'application/json');
 
-    // 5. Output the live, altered JSON object array directly to the web screen
+    // 5. Output the clean, dynamic JSON nested object structure
     return res.status(200).json(realTimeData);
 
   } catch (error) {
