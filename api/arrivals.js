@@ -3,28 +3,45 @@ import path from 'path';
 
 export default function handler(req, res) {
   try {
-    // 1. Read your newly modified data.json file
+    // 1. Read your modified data.json file
     const filePath = path.join(process.cwd(), 'api', 'data.json');
     const fileData = fs.readFileSync(filePath, 'utf8');
     const baseData = JSON.parse(fileData);
 
-    // 2. Fetch the current clock seconds right now
-    const currentSeconds = new Date().getSeconds();
+    // 2. Fetch current time metrics
+    const now = new Date();
+    const currentMinutes = now.getMinutes();
+    const currentSeconds = now.getSeconds();
+    
+    // We use the current date/hour as a seed base so "random" numbers persist for a bit
+    const seedBase = now.getFullYear() + now.getMonth() + now.getDate() + now.getHours();
 
     // 3. Loop through the outer array elements
-    const realTimeData = baseData.map((station) => {
-      // Check if this item has the nested 'details' array
+    const realTimeData = baseData.map((station, stationIndex) => {
       if (station.details && Array.isArray(station.details)) {
-        // Map over the inner array to dynamically overwrite the minutes inside it
-        const updatedDetails = station.details.map((train, index) => {
-          const dynamicCountdown = Math.max(1, Math.floor((120 - ((currentSeconds + (index * 15)) % 60)) / 10));
+        
+        const updatedDetails = station.details.map((train, trainIndex) => {
+          // Create a unique deterministic cycle length for this specific train (e.g., between 8 and 15 minutes)
+          const cycleSeed = (seedBase + stationIndex + trainIndex) % 8;
+          const totalCycleMinutes = 8 + cycleSeed; 
+
+          // Shift the start time so trains don't all arrive at the exact same minute
+          const trainOffset = (trainIndex * 3) % totalCycleMinutes;
+          
+          // Calculate how many minutes are left in the current cycle
+          let dynamicCountdown = totalCycleMinutes - ((currentMinutes + trainOffset) % totalCycleMinutes);
+          
+          // Drop it to 0 when it reaches the final minute, matching the clock's progress
+          if (dynamicCountdown === totalCycleMinutes) {
+            dynamicCountdown = 0;
+          }
+
           return {
             ...train,
-            next_arrival_minutes: dynamicCountdown // Overwrites the inner static number
+            next_arrival_minutes: dynamicCountdown
           };
         });
 
-        // Return the object with the cleanly updated inner array
         return {
           ...station,
           details: updatedDetails
