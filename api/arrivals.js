@@ -8,31 +8,31 @@ export default function handler(req, res) {
     const fileData = fs.readFileSync(filePath, 'utf8');
     const baseData = JSON.parse(fileData);
 
-    // 2. Fetch current time metrics
-    const now = new Date();
-    const currentMinutes = now.getMinutes();
-    const currentSeconds = now.getSeconds();
-    
-    // We use the current date/hour as a seed base so "random" numbers persist for a bit
-    const seedBase = now.getFullYear() + now.getMonth() + now.getDate() + now.getHours();
+    // 2. Fetch absolute real-time minutes elapsed since 1970
+    // This guarantees perfect clock synchronization across page refreshes
+    const totalMinutesSinceEpoch = Math.floor(Date.now() / 60000);
 
     // 3. Loop through the outer array elements
     const realTimeData = baseData.map((station, stationIndex) => {
       if (station.details && Array.isArray(station.details)) {
         
         const updatedDetails = station.details.map((train, trainIndex) => {
-          // Create a unique deterministic cycle length for this specific train (e.g., between 8 and 15 minutes)
-          const cycleSeed = (seedBase + stationIndex + trainIndex) % 8;
-          const totalCycleMinutes = 8 + cycleSeed; 
+          // Unique identifiers for this specific train sequence
+          const uniqueId = stationIndex * 10 + trainIndex;
+          
+          // 1. Determine a pseudo-random cycle duration for this train (e.g., shifts between 6 to 12 minutes)
+          // We change the seed every 3 hours so the timing variations shift over time
+          const timeBlockSeed = Math.floor(totalMinutesSinceEpoch / 180); 
+          const cycleDuration = 6 + ((uniqueId + timeBlockSeed) % 7); 
 
-          // Shift the start time so trains don't all arrive at the exact same minute
-          const trainOffset = (trainIndex * 3) % totalCycleMinutes;
-          
-          // Calculate how many minutes are left in the current cycle
-          let dynamicCountdown = totalCycleMinutes - ((currentMinutes + trainOffset) % totalCycleMinutes);
-          
-          // Drop it to 0 when it reaches the final minute, matching the clock's progress
-          if (dynamicCountdown === totalCycleMinutes) {
+          // 2. Add an offset so all trains do not arrive at the exact same minute
+          const trainOffset = (uniqueId * 3) % cycleDuration;
+
+          // 3. Calculate remaining minutes. The modulo (%) guarantees it drops by 1 every minute
+          let dynamicCountdown = cycleDuration - ((totalMinutesSinceEpoch + trainOffset) % cycleDuration);
+
+          // 4. Hit 0 right when the cycle resets
+          if (dynamicCountdown === cycleDuration) {
             dynamicCountdown = 0;
           }
 
